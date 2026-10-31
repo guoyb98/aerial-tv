@@ -1,0 +1,87 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apk
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Rebrand sources (package name + update URLs)
+        run: python3 tools/rebrand.py
+
+      - name: Restore signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          mkdir -p local
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > local/release.keystore
+          printf 'storeFile=release.keystore\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+            "$STORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > local/signing.properties
+
+      - name: Build
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleStandardRelease assembleGuardRelease :lite:assembleRelease
+
+      - name: Verify package names
+        run: |
+          AAPT2=$(ls "$ANDROID_HOME/build-tools/"*/aapt2 | sort -V | tail -n1)
+          echo "using $AAPT2"
+          check() {
+            LINE=$("$AAPT2" dump badging "$1" | head -n1)
+            echo "$LINE"
+            case "$LINE" in
+              *"package: name='$2'"*) ;;
+              *) echo "::error::wrong package in $1"; exit 1 ;;
+            esac
+          }
+          check app/build/outputs/apk/standard/release/app-standard-release.apk com.dangbei.tvlauncher
+          check app/build/outputs/apk/guard/release/app-guard-release.apk com.dangbei.tvlauncher
+          check lite/build/outputs/apk/release/app-release.apk com.dangbei.tvlauncher.lite
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p out
+          cp app/build/outputs/apk/standard/release/app-standard-release.apk out/aerial-standard.apk
+          cp app/build/outputs/apk/guard/release/app-guard-release.apk out/aerial-guard.apk
+          cp lite/build/outputs/apk/release/app-release.apk out/aerial-lite.apk
+          VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts | head -n1)
+          echo "VERSION=v$VERSION" >> "$GITHUB_ENV"
+          echo "v$VERSION" > out/version.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: out/
+
+      - name: Publish release (only when the version is new)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "Release $VERSION already exists; skipping publish."
+            exit 0
+          fi
+          gh release create "$VERSION" out/* \
+            --title "$VERSION" \
+            --notes "自动构建自上游 pengchujin/aerial-tv @ $(git rev-parse --short HEAD)。包名 com.dangbei.tvlauncher，应用内更新指向本仓库。"
