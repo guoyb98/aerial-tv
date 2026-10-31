@@ -57,14 +57,15 @@ jobs:
           }
           check app/build/outputs/apk/standard/release/app-standard-release.apk com.dangbei.tvlauncher
           check app/build/outputs/apk/guard/release/app-guard-release.apk com.dangbei.tvlauncher
-          check lite/build/outputs/apk/release/app-release.apk com.dangbei.tvlauncher.lite
+          LITE_APK=$(ls lite/build/outputs/apk/release/*.apk | head -n1)
+          check "$LITE_APK" com.dangbei.tvlauncher.lite
 
       - name: Collect artifacts
         run: |
           mkdir -p out
           cp app/build/outputs/apk/standard/release/app-standard-release.apk out/aerial-standard.apk
           cp app/build/outputs/apk/guard/release/app-guard-release.apk out/aerial-guard.apk
-          cp lite/build/outputs/apk/release/app-release.apk out/aerial-lite.apk
+          cp lite/build/outputs/apk/release/*.apk out/aerial-lite.apk
           VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts | head -n1)
           echo "VERSION=v$VERSION" >> "$GITHUB_ENV"
           echo "v$VERSION" > out/version.txt
