@@ -4,6 +4,16 @@
 
 ## 现状（2026-10-31）
 
+- **未发布（main，1.76 之后）**：「让 Aerial 更流畅」在已经编译之后还显示（户主在 TCL 上看到）：是否提供只在进程启动时判断一次，TCL 多屏互动装完 Aerial 先启动、判定没编译，之后 ADB 编译了也不收起。现在回到首页和打开控制中心时再读一次 odex 长度（`SelfCompile.recheck`）。TCL MT5879 上多屏互动推测试包验证：装完显示这一行（odex 93 KB），Aerial 在前台时 compile speed，再打开控制中心这一行没了（12434 KB）；守护、主页键（AIDA64）正常。没录屏看打开控制中心那一帧会不会先闪出这一行（回首页时的复查一般已经先收起）。小米安卓 14 不显示这一行，不涉及。TCL 上现在装的是这个测试包（versionCode 仍 97），下次发版 versionCode 要大于 97。
+
+- **1.76（versionCode 97）+ Aerial Lite 1.12（13），2026-10-31 晚发布**（[v1.76](https://github.com/pengchujin/aerial-tv/releases/tag/v1.76)）：下面这一轮晚巡检的全部代码，加上户主要求合的 PR #1005（连续圆角，e8e2869，#1003 关闭）。Lite 因连续圆角和 devices.json（MTTP0）加 1。TCL MT5879 多屏互动推 guard（uiautomator 确认焦点在「同意」再按确定，两个 walleve 服务保留），compile speed；用 `hid` 造外接蓝牙鼠标，1.76 下 AIDA64 里 `mouse=true filter=true`（#1039 的修复生效）；**注意 TCL 上 shell 的 `input keyevent 3` 本来就不经过守护过滤**（没插鼠标也先 START cyberui），主页键闪不闪要用实体遥控器看。TCL 主页键（AIDA64、HDMI 2）、信号源列表、屏保进出录屏回归通过。**留着查**：TCL 上 `PREVIEW_SCREENSAVER` 进系统 dream 的头 0.2 秒露出一张粉色晚霞图，随后 Aerial 被恢复又暂停一次、再黑屏等影片（TCL 首页是静态图，和这一轮改动无关，没和 1.75 对比过）。小米 MFTR0 `adb install -r` standard + compile speed，主页键（设置、HDMI 2）、信号源列表、屏保接力回归通过。三个包签名 e089…，官网 version.txt = v1.76，三个包 md5 和 Release 一致。#1039 #984 #933 #941 #1014 #1004 #1003 贴了发布链接（`local/triage/release-1.76-posts.py`）。
+
+- **2026-10-31 晚巡检（已随 1.76 发布）**，记录见 `local/triage/2026-10-31c-full.md`。264 issue / 47 PR，用户最后发言 31 + 7。只用小米 MFTR0（TCL 户主在用，没装测试包）。
+  - 修：#1039 1.75 插鼠标时主页键先闪原桌面（fdc9b36：插鼠标关过滤只在装有 PatchWall 或小米系统界面的电视上，卡死只在 MFTR0 安卓 11 上出现过；**TCL 上没验证**，发版装 TCL 时用 `hid` 虚拟鼠标看 `filter=`）；#1028 CVTE 工厂测试页 `CVTE_AT_HOME` 被当原桌面（2829ac4，单测；报告人是改包名构建，关）；#984 blbl.cat3399 里按主页键收不到 PatchWall 的窗口事件、每次等 1.5–2 s（de2e75f：这类 App 记进 prefs `guard_quiet_home`，之后从按下起每 150 ms 查用量统计；MFTR0 OS3.0.101 上窗口事件 140 ms 就到，复现不了，**没真机验证**）；#933 安卓 5–8.1 守护用 PendingIntent 拉回 Aerial，绕过系统处理主页键后的 5 秒限制（f205948：安卓 8.0 模拟器 aerial26 对照，Launcher3 设为默认桌面、关守护按主页键再开守护，5.0 s → 0.05 s；安卓 5.0 模拟器上 Aerial 是默认桌面又没有 set-home-activity，没做；安卓 6 真机没有）；#941 取不到帧的电视（PixelCopy 慢或影片文件卡住）离开时没留画面，回主屏直接黑屏等影片，不再露出很久以前的静止画面（89b1612：MFTR0 装了把 FileFramesStuck 强制为真的临时包录屏逐帧，第一版回来第一帧还是旧画面，改成在 App 后面 3 秒先变黑后，从第一帧起黑到影片出来；**索尼真机没验证**）；PR #1033 长文件名把 .mp4 截掉（bf5f5e9，只摘这一半，单测）；#1014 MTTP0 亮度 devices.json `ignoresPictureBacklight`，走 mitv 面板探测（f94d613，Lite 共用，没真机）；adapt.md 补 `ignoresScreenBrightness`（12bd549，#1025）；README 加红米 A Pro 75（da9040d，#1042）。
+  - 不合：PR #995（和 #984 改的同一段冲突，「只数活动窗口」影响所有电视，请变基收窄）；#1033 海报部分、#958 #961 #1015 留到功能轮次；#490 维持。
+  - 验证：161 个单元测试（standard、guard）、Lite lint、三个包签名 e089…。MFTR0 装 main 的 release 包（versionCode 仍 96）+ compile speed：从设置、云视听小电视、HDMI 2 按主页键立刻拉回；信号源列表；屏保进出录屏逐帧（影片连续无黑帧、磁贴淡回）。
+  - 顺带确认：MFTR0（OS3.0.101）重启 33 小时后 SAW / WRITE_SETTINGS / GET_USAGE_STATS / REQUEST_INSTALL appops 仍是 allow，#1034 说的「重启后被重置」在这台上没出现。
+
 - **未发布（main，1.75 之后）**：#1023 乐视 X4-50 退出最后一个 App 后黑屏、守护不接管（e6f22ad）：守护没看到窗口时问用量统计，原来只取最后一次「移到前台」；现在看它之后有没有自己的「移到后台」（`guard/UsageFront.kt`），有就当前台空着、按原桌面在前台处理（也不再被「Aerial 常被强停」挡住）。只有单元测试，手上的电视都有原桌面兜底，做不出这个场景。
 
 - **1.75（versionCode 96），2026-10-31 下午发布**（[v1.75](https://github.com/pengchujin/aerial-tv/releases/tag/v1.75)），Lite 没改（仍 1.11 / 12）。记录见 `local/triage/2026-10-31b-full.md`。
