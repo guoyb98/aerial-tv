@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  # Allow sync-upstream.yml to run this in the same run after merging upstream
+  # (a push made with GITHUB_TOKEN does not trigger workflows, by design).
+  workflow_call:
 
 permissions:
   contents: write
