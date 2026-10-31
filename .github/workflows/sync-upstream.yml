@@ -15,12 +15,15 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    outputs:
+      pushed: ${{ steps.merge.outputs.pushed }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Merge upstream main into this fork's main
+      - id: merge
+        name: Merge upstream main into this fork's main
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -29,8 +32,19 @@ jobs:
           BEHIND=$(git rev-list --count HEAD..upstream/main)
           if [ "$BEHIND" -eq 0 ]; then
             echo "Upstream has nothing new."
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo "Upstream has $BEHIND new commit(s); merging..."
           git merge upstream/main --no-edit
           git push origin main
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+  # A push made with GITHUB_TOKEN does not trigger workflows (recursion
+  # prevention), so the build is called here instead of relying on push.
+  build:
+    needs: sync
+    if: needs.sync.outputs.pushed == 'true'
+    uses: ./.github/workflows/build.yml
+    permissions:
+      contents: write
