@@ -1,0 +1,36 @@
+name: Sync upstream
+
+on:
+  schedule:
+    - cron: '23 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Merge upstream main into this fork's main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/pengchujin/aerial-tv.git
+          git fetch upstream main
+          BEHIND=$(git rev-list --count HEAD..upstream/main)
+          if [ "$BEHIND" -eq 0 ]; then
+            echo "Upstream has nothing new."
+            exit 0
+          fi
+          echo "Upstream has $BEHIND new commit(s); merging..."
+          git merge upstream/main --no-edit
+          git push origin main
