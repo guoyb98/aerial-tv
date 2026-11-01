@@ -48,3 +48,7 @@ jobs:
     uses: ./.github/workflows/build.yml
     permissions:
       contents: write
+    # Reusable workflows do NOT inherit secrets by default; without this the
+    # signing key decodes to a 0-byte file and the build fails at packaging
+    # with an opaque DER error after several minutes.
+    secrets: inherit
