@@ -41,6 +41,31 @@ jobs:
           printf 'storeFile=release.keystore\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
             "$STORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > local/signing.properties
 
+      # Fail in seconds with a readable error if any of the four signing secrets
+      # (KEYSTORE_BASE64, STORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD) is missing or
+      # wrong, instead of after the full build with an opaque DER error.
+      - name: Validate signing material
+        env:
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          [ -s local/release.keystore ] || {
+            echo "::error::local/release.keystore is empty: KEYSTORE_BASE64 did not reach this run. If run via workflow_call, the caller must pass 'secrets: inherit'."
+            exit 1
+          }
+          keytool -list -keystore local/release.keystore -storepass "$STORE_PASSWORD" || {
+            echo "::error::Keystore unreadable: KEYSTORE_BASE64 is corrupt or STORE_PASSWORD is wrong"
+            exit 1
+          }
+          jar cf local/probe.jar -C local signing.properties
+          jarsigner -keystore local/release.keystore -storepass "$STORE_PASSWORD" \
+            -keypass "$KEY_PASSWORD" local/probe.jar "$KEY_ALIAS" || {
+            echo "::error::Key unreadable: KEY_ALIAS or KEY_PASSWORD is wrong"
+            exit 1
+          }
+          rm -f local/probe.jar
+
       - name: Build
         run: |
           chmod +x gradlew
