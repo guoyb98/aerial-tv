@@ -440,6 +440,82 @@ class HomeGuardService : AccessibilityService() {
     }
     private val frontAfterHomeAgain: Runnable = Runnable { frontAfterHome.run() }
 
+    /** Xiaomi's UI boost, where Aerial answers Home in other apps itself; see uiBoostChanged. */
+    private fun watchUiBoost() {
+        if (!backOnPause || uiBoostWatched || Settings.Global.getString(contentResolver, UI_BOOST) == null) return
+        uiBoostWatched = true
+        contentResolver.registerContentObserver(Settings.Global.getUriFor(UI_BOOST), false, uiBoostObserver)
+    }
+
+    private var uiBoostWatched = false
+
+    private val uiBoostObserver by lazy {
+        object : ContentObserver(handler) {
+            override fun onChange(selfChange: Boolean) = uiBoostChanged()
+        }
+    }
+
+    /**
+     * Home in another app on Xiaomi from Android 12 (backOnPause): PatchWall showed for some 300 ms
+     * before Aerial came back (MiTV-MFFU1, Android 14, Home in Quark: seven frames of it in a
+     * screen recording). PatchWall's window change, which the guard answers, comes once it has
+     * been drawn: 290 ms after the key there, and PatchWall is drawn at about 220 ms. The
+     * "homekey" broadcast is no help: it is held back from Aerial while Aerial is in the back,
+     * and comes only once it is in front again (363 ms).
+     *
+     * Xiaomi's UI boost (TVQSService in services.jar) sets [UI_BOOST] as an activity switch
+     * starts, 45-65 ms after the key. From then usage stats are read until they have PatchWall's
+     * home screen just come to the front, and Aerial then starts over it, as Home in Aerial is
+     * answered on onPause. They lag: PatchWall was there 116-279 ms after the key on MiTV-MFFU1,
+     * and 199-434 ms with 云视听小电视 in front on MiTV-MFTR0 (Android 14), which draws PatchWall
+     * later. Another app moving to the front ends the look, as a switch within an app does.
+     *
+     * Not with accessibility's window changes as a second signal: asking for them holds the
+     * window change of PatchWall back until the window list has caught up, and on MiTV-MFTR0 the
+     * fallback below came at 336 ms instead of 177-277 ms, after PatchWall was on the screen. Not
+     * by the last window seen either: an app brought back to its task sends none (issue #475), so
+     * the guard still had Aerial in front after 云视听极光 was opened again from it. Boot and wake
+     * keep their own handling of PatchWall, as does the stock launcher's tile.
+     */
+    private fun uiBoostChanged() {
+        if (!stockHomeMayCome()) return
+        stockHomeLookFrom = System.currentTimeMillis()
+        stockHomeLookUntil = SystemClock.uptimeMillis() + STOCK_HOME_LOOK_FOR_MS
+        handler.removeCallbacks(stockHomeLook)
+        stockHomeLook.run()
+    }
+
+    private var stockHomeLookFrom = 0L
+    private var stockHomeLookUntil = Long.MIN_VALUE / 2
+
+    private val stockHomeLook: Runnable = object : Runnable {
+        override fun run() {
+            if (!stockHomeMayCome()) return
+            val front = usageFront(STOCK_HOME_FRONT_MS)
+            if (front != null && !front.closed && front.at >= stockHomeLookFrom - STOCK_HOME_FRONT_MS) {
+                if (stockHomes[front.pkg]?.contains(front.cls) == true) {
+                    Log.i(TAG, "usage stats have ${front.pkg} just come to the front; bringing Aerial back")
+                    lastWindow = front.pkg to front.cls
+                    goHome()
+                    return
+                }
+                // Something else came to the front since the boost started: not Home.
+                if (front.at >= stockHomeLookFrom - STOCK_HOME_SLACK_MS) return
+            }
+            if (SystemClock.uptimeMillis() < stockHomeLookUntil) handler.postDelayed(this, STOCK_HOME_LOOK_MS)
+        }
+    }
+
+    /** Aerial's Home not in front, so Home may leave something for PatchWall; see uiBoostChanged. */
+    private fun stockHomeMayCome(): Boolean {
+        if (!backOnPause || aerialResumed || bootStockHolding) return false
+        val now = SystemClock.uptimeMillis()
+        if (now < allowStockUntil || now - broughtBackAt < 1_000) return false
+        val sinceBoot = SystemClock.elapsedRealtime()
+        if (sinceBoot < BOOT_WINDOW_MS || sinceBoot - screenOnAt < WAKE_WINDOW_MS) return false
+        return usageStatsAllowed(this)
+    }
+
     /** The app Home was last pressed in; see frontAfterHome. */
     private var homeFrom: String? = null
 
@@ -508,6 +584,7 @@ class HomeGuardService : AccessibilityService() {
     override fun onServiceConnected() {
         instance = this
         BootOpen.noteStartedInStandby(this)
+        watchUiBoost()
         // The profile is in credential storage: only once unlocked.
         if (SystemClock.elapsedRealtime() < BOOT_WINDOW_MS && GuardSetup.isUserUnlocked(this) &&
             DeviceProfile.current(this).bootStockMs > 0
@@ -741,6 +818,10 @@ class HomeGuardService : AccessibilityService() {
         runCatching { unregisterReceiver(packageChanges) }
         runCatching { unregisterReceiver(screenOn) }
         runCatching { unregisterReceiver(homeKey) }
+        if (uiBoostWatched) {
+            uiBoostWatched = false
+            runCatching { contentResolver.unregisterContentObserver(uiBoostObserver) }
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             runCatching { unregisterReceiver(userUnlocked) }
         }
@@ -1412,6 +1493,14 @@ class HomeGuardService : AccessibilityService() {
         private const val FRONT_AFTER_HOME_MS = 1_500L
         /** How often usage stats are read after Home once the guard has been found deaf. */
         private const val DEAF_LOOK_MS = 150L
+        /** How recently PatchWall must have come to the front, and how often and how long to look; see uiBoostChanged. */
+        private const val STOCK_HOME_FRONT_MS = 2_000L
+        private const val STOCK_HOME_LOOK_MS = 20L
+        private const val STOCK_HOME_LOOK_FOR_MS = 600L
+        /** Usage stats' times and the boost's are the same clock read in two processes. */
+        private const val STOCK_HOME_SLACK_MS = 100L
+        /** Xiaomi's UI boost; see uiBoostChanged. */
+        private const val UI_BOOST = "mitv_fast_cur_anim_scale"
         private const val XGIMI_FRAMEWORK = "com.xgimi.xgimiframeworkui"
         private const val FOREGROUND_POLL_MS = 1_000L
         private const val FOREGROUND_LOOKBACK_MS = 10_000L
