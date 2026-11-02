@@ -176,6 +176,7 @@
     <string name="device_speaker">Саундбар</string>
     <string name="cc_update_available">Новая версия: %s</string>
     <string name="cc_update_title">Aerial %s</string>
+    <string name="cc_update_notes">Что нового в %s</string>
     <string name="cc_update_current">На этом телевизоре установлен Aerial %s.</string>
     <string name="cc_update_keeps">Ваши приложения, раскладка, обои и настройки останутся без изменений.</string>
     <string name="cc_update_scan">Отсканируйте телефоном, чтобы узнать, как обновиться (скопировать команду установки или передать её ИИ-агенту).</string>
@@ -227,6 +228,7 @@
     <string name="notice_boot_switch">%1$s откроется при включении телевизора вместо %2$s</string>
     <string name="notice_boot_off">%1$s больше не будет открываться при включении телевизора</string>
     <string name="tile_stock_home">Главный экран ТВ</string>
+    <string name="tile_xiaowei_call">Xiaowei Call</string>
     <string name="tile_kids">Детям</string>
     <string name="ss_videos">Видео</string>
     <string name="ss_videos_hint">Добавьте MP4 или MOV со страницы на телефоне. Просмотр без сети; если видео недоступны, показываются фото.</string>

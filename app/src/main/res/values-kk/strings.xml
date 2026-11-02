@@ -176,6 +176,7 @@
     <string name="device_speaker">Саундбар</string>
     <string name="cc_update_available">Жаңа нұсқа: %s</string>
     <string name="cc_update_title">Aerial %s</string>
+    <string name="cc_update_notes">%s нұсқасындағы жаңалықтар</string>
     <string name="cc_update_current">Бұл теледидарда Aerial %s орнатылған.</string>
     <string name="cc_update_keeps">Қолданбаларыңыз, орналасуыңыз, түсқағазыңыз және параметрлеріңіз сол күйінде қалады.</string>
     <string name="cc_update_scan">Қалай жаңартуды көру үшін телефонмен сканерлеңіз (орнату пәрменін көшіру немесе оны жасанды интеллект агентіне беру).</string>
@@ -227,6 +228,7 @@
     <string name="notice_boot_switch">Теледидар қосылғанда %2$s орнына %1$s ашылады</string>
     <string name="notice_boot_off">Теледидар қосылғанда %1$s енді ашылмайды</string>
     <string name="tile_stock_home">ТД басты экраны</string>
+    <string name="tile_xiaowei_call">Xiaowei Call</string>
     <string name="tile_kids">Балаларға</string>
     <string name="ss_videos">Бейне</string>
     <string name="ss_videos_hint">Телефон бетінен MP4 немесе MOV қосыңыз. Интернетсіз ойнатылады; бейне болмаса, фотолар көрсетіледі.</string>
