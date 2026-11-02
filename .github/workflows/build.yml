@@ -7,6 +7,12 @@ on:
   # Allow sync-upstream.yml to run this in the same run after merging upstream
   # (a push made with GITHUB_TOKEN does not trigger workflows, by design).
   workflow_call:
+    inputs:
+      ref:
+        description: 'Commit/ref to build; empty = whatever triggered this run'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -20,6 +26,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        # sync-upstream passes the just-pushed merge SHA here; empty string is
+        # treated as unset by actions/checkout, so other triggers are unaffected.
+        with:
+          ref: ${{ inputs.ref }}
 
       - uses: actions/setup-java@v4
         with:

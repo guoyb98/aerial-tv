@@ -17,6 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       pushed: ${{ steps.merge.outputs.pushed }}
+      sha: ${{ steps.merge.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,6 +40,7 @@ jobs:
           git merge upstream/main --no-edit
           git push origin main
           echo "pushed=true" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   # A push made with GITHUB_TOKEN does not trigger workflows (recursion
   # prevention), so the build is called here instead of relying on push.
@@ -46,6 +48,11 @@ jobs:
     needs: sync
     if: needs.sync.outputs.pushed == 'true'
     uses: ./.github/workflows/build.yml
+    # A reusable workflow pins to the caller's commit — the one the schedule
+    # fired on, i.e. BEFORE the merge was pushed — so pass the new SHA or the
+    # build produces a stale APK every time.
+    with:
+      ref: ${{ needs.sync.outputs.sha }}
     permissions:
       contents: write
     # Reusable workflows do NOT inherit secrets by default; without this the
