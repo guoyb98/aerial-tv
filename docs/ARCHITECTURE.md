@@ -26,7 +26,8 @@ app/src/main/java/app/orchard/tv/
 │   ├── home/HomeChrome.kt   背景（AmbientBackground）、大时钟、右上角状态胶囊、时间格式
 │   ├── home/Overlays.kt     长按菜单、隐藏的 App 面板、MenuRow、MiniTile
 │   ├── home/FolderView.kt   打开的文件夹
-│   ├── home/PinPad.kt       家长密码键盘（设置 / 解锁，遥控器数字键或屏幕键盘）
+│   ├── home/PinPad.kt       家长密码键盘（设置 / 解锁 / 只核对，遥控器数字键或屏幕键盘）
+│   ├── home/KidsMode.kt     儿童与长辈模式的设置面板（KidsSetupSheet）和锁屏（KidsLockScreen）
 │   ├── home/Screensaver.kt  屏保 UI：航拍（Media3 ExoPlayer，见 wallpaper/AerialStream.kt）/ 照片（Ken Burns）/ 时钟
 │   ├── control/ControlCenter.kt  控制中心：按钮、音量/亮度滑块、「个性化」入口、有新版本时的提示和升级说明页、底部版本号；信号源页（只负责切换）和信号源设置页（显示在主屏幕、开机时打开）
 │   └── wallpaper/WallpaperSheet.kt  个性化面板（壁纸、屏保和开始时间、焦点样式、家长密码、天气）+ 手机扫码卡片
@@ -37,6 +38,7 @@ app/src/main/java/app/orchard/tv/
 │   ├── Aerials.kt           读取 assets/aerials.json（Apple 航拍目录）；AerialFormats：这台电视能播哪档画质
 │   └── PhoneServer.kt       NanoHTTPD 手机配置页 + 二维码生成
 ├── settings/
+│   ├── Restricted.kt        儿童与长辈模式（Kids and Elders，SharedPreferences "restricted"）：给谁用、显示的 App、其他 App 拦不拦、时间规则 `KidsTime`、今天的用量（见「儿童与长辈模式」）
 │   └── AerialSettings.kt    Aerial 自己的偏好（SharedPreferences "settings"）：焦点样式 FocusStyle（默认高对比度）、固定到主屏幕的信号源、开机信号源、屏保开始时间、家长密码（SHA-256，解锁 10 分钟或按 HOME 重新上锁）
 ├── update/
 │   └── Updates.kt           每 3 小时读一次官网 download/version.txt，有新版时控制中心提示；点「下载并安装」才下载 APK 并交给系统安装器（见「升级」）
@@ -49,12 +51,13 @@ app/src/main/java/app/orchard/tv/
 │   ├── DeviceProfile.kt     按机型的修正（数据在 assets/devices.json），这台电视自己的修正可以覆盖它
 │   └── Diagnostics.kt       给 GitHub issue 用的诊断报告（手机页「反馈问题」、`dumpsys activity …MainActivity report`、tools/report.sh）
 ├── guard/
-│   ├── HomeGuardService.kt  无障碍「桌面守护」：原桌面出现就切回、从磁贴进原桌面时临时拦 HOME、亮屏检查、ADB 保持
+│   ├── HomeGuardService.kt  无障碍「桌面守护」：原桌面出现就切回、从磁贴进原桌面时临时拦 HOME、亮屏检查、ADB 保持；儿童模式下把其他 App 拉回桌面、在别的 App 上面显示提醒
+│   ├── KidsWatch.kt         儿童模式的计时：统计用量、开始休息、锁定前 5 / 1 分钟提醒、锁定后把 Aerial 拉回前台
 │   ├── GuardSetup.kt        用 WRITE_SECURE_SETTINGS 重新开启守护 / 保持 ADB / 「已启用未绑定」时强制重绑
 │   ├── RevivalListener.kt   通知监听服务：被强杀后由系统重绑，借此复活并重开守护；10 分钟内复活 3 次以上时，看不到前台就不再抢 HOME（乐视 #63）
 │   ├── RevivalSync.kt       同步适配器（挂在 settings 上，带一个自己的账号）：系统不许通知监听的低内存 Android 9（小米 MFTP0，#72）上，强停后约 30–60 秒由同步框架拉起 Aerial 并重开守护；守护在运行时什么都不做
 │   ├── BootReceiver.kt      真正重启后的兜底
-│   └── ConfigReceiver.kt    ADB 专用配置入口（keep_adb、own_screensaver、clear_pin、export_tiles、check_update、update_test、update_test_self、self_compile、device_profile、list_sources、open_source），要求发送方持有 WRITE_SECURE_SETTINGS；被厂商的启动管理停用时（海信 V3K_PRO，广播返回 `result=0` 却没生效），`GuardSetup.ensureEnabled` 把它和 BootReceiver 一起恢复（PR #1112）
+│   └── ConfigReceiver.kt    ADB 专用配置入口（keep_adb、own_screensaver、clear_pin、kids_off、kids_used_minutes、kids_continuous_minutes、export_tiles、check_update、update_test、update_test_self、self_compile、device_profile、list_sources、open_source），要求发送方持有 WRITE_SECURE_SETTINGS；被厂商的启动管理停用时（海信 V3K_PRO，广播返回 `result=0` 却没生效），`GuardSetup.ensureEnabled` 把它和 BootReceiver 一起恢复（PR #1112）
 └── dream/AerialDream.kt    系统级屏保（DreamService + Compose）
 
 app/src/main/assets/aerials.json   Apple 航拍目录（114 条：地址 + 中英文地名 + 时间点说明）
@@ -148,6 +151,18 @@ Logo 的大小统一：先在 256×256 的采样里找出 Logo 的范围，再�
 
 「隐藏的 App」从控制中心挪到了这里：点开是原来的 `HiddenAppsSheet`，返回回到个性化；设了家长密码时先输密码。
 
+## 儿童与长辈模式（settings/Restricted.kt，issue #133 #604 #159 #863 #718 #1013）
+
+一个只显示选好的 App、不能整理的桌面，两种用法：「儿童」可以限制时间、拦住其他 App；「长辈」磁贴更大、一直显示名称、焦点固定白框，默认不拦其他 App。都在个性化最后一行「儿童与长辈模式」里设置，要先有家长密码（没有就先设一个，因为退出要用它）。
+
+- **进入、退出**：设置面板里按「进入儿童模式」。控制中心只剩时间、音量、亮度、今天还剩多少时间和「退出儿童模式」（要密码，`PinMode.Verify` 只核对，不像 `Unlock` 那样解锁 10 分钟）。退出只是暂停（`Restricted.suspended`，不存盘）：Aerial 的屏保开始、屏幕关闭（`KidsWatch` 收 SCREEN_OFF）或进程重启时自动回到模式，免得家长忘了切回去。暂停时控制中心多一行「回到儿童模式」，不用密码。设置面板里的「关闭这个模式」才是真的关掉。关闭家长密码时模式一起关掉；忘了密码时 `ConfigReceiver --ez clear_pin true` 也一起关掉，`--ez kids_off true` 只关模式。
+- **桌面**：模式有自己的列表 `Restricted.allowed`（按选择的顺序），不碰户主的排序、文件夹和隐藏（`LayoutStore`）。可选的是首页的 App（文件夹里的按位置展开）、隐藏的 App 和所有信号源（`HomeViewModel.kidsCandidates`，只在模式开着或设置面板打开时才算）。模式里固定每排 4 个（`Restricted.COLUMNS`，`AerialSettings.homeColumns` 的取值），长辈模式加上全部名称和高对比度焦点（`showAllNames`、`focusStyle` 的取值；户主自己的选择不变）。长按和菜单键不出菜单；信号源键不开控制中心的信号源页（TCL 自己的信号源面板照样出来）；`MainActivity.launch` 和开机打开的 App 都只认模式里的。新装的 App 不会自动加进来。
+- **拦住其他 App**（`KidsWatch.keepsAway`，守护的 `onAccessibilityEvent`）：模式开着、选了「拦住」时，不在列表里的 App（有启动入口的包）、电视设置、信号源的播放器一出来就 `goHome`，首页顶上说「某某不在这个模式里」。输入法、对话框、权限弹窗这类没有启动入口的包不拦；原桌面的 home activity 和创维切信号源时经过的 `SOURCE_SWITCHERS` 交给守护原来的逻辑。允许的包（信号源按它的播放器）由 `HomeViewModel.noteKidsPackages` 存进 `Restricted.allowedPackages`，守护先于首页启动时也有。没有守护时，能读用量统计的话每 2 秒看一次前台（`KidsWatch.keepAwayByUsage`）；都没有就只能限制桌面，设置面板会说明。**局限**：同一台电视的信号源共用一个播放器（TCL `com.tcl.tv`、小米 `tvplayer`），允许了一个信号源，用遥控器的信号源键就能切到别的信号源；当前是哪个信号源读不准（TCL MT5879 的 `global tvInputId` 在无信号的 HDMI 3 上是空的），设置面板选了信号源时会提示。App 里面的内容（短视频）管不到。
+- **时间**（`KidsTime`，纯函数，`KidsTimeTest`）：工作日 / 周末每天的分钟数，可以看的时段（`startMinute`–`endMinute`，精确到分钟，默认从 6:00 开始），每看多少分钟休息多少分钟（默认 5 分钟）。电视的设置面板只给几个常用值；手机页可以设任意值，不在常用值里的会作为一个额外的已选中选项显示在电视上（`withCustom`）。`RestrictedRules.valid` 检查范围（分钟数 0–1440，结束晚于开始，休息 1–120 分钟），不合法的整组不保存。只算亮屏、而且前台不是 Aerial 首页、屏保或 Aerial 的系统屏保的时间（`KidsWatch` 每 10 秒记一次，两次之间超过 20 秒当作待机不算）；连续 5 分钟没在看就算休息过。用量按本地日期存在 "restricted" 里，重启不清零，第二天清零。家长在锁屏或手机页「再看 N 分钟 / 今天不限」写 `allowUntil`：这段时间里什么都不锁，休息也重新计。时间规则一改（电视或手机上），`allowUntil` 清零，新规则马上生效：小米 MFTR0 上一段到 21:00 的额外时间曾让 19:20 设的「到 17:00」不起作用。
+- **提醒和锁定**：锁定前 5 分钟和 1 分钟提醒一次（`KidsWatch.warnIfDue`）：首页在前台时用首页的提示条，在别的 App 里时由守护画一个无障碍浮层（`TYPE_ACCESSIBILITY_OVERLAY`，不用另外申请悬浮窗权限，8 秒后消失；`HomeGuardService.showBanner`），没有守护时用 Toast。锁定时 `KidsWatch` 把 Aerial 拉回前台（守护的 `goHome`，没有守护时直接 `startActivity`），首页盖上 `KidsLockScreen`（原因、休息的倒计时、「家长」按钮），锁着时任何 App 都会被拉回来。没做「锁屏一段时间后待机」：各家电视没有通用的待机接口。
+- **手机页**：模式开着时，手机页的一切修改都要家长密码（请求头 `X-Aerial-Pin`，`PhoneServer.serve` 开头统一检查），否则返回 `kidsLocked`；`api/kids/unlock` 核对密码，连错 5 次停 1 分钟。模式开着时主屏幕标签最上面一张卡片（没开时放在「更多」标签里，不打扰不用这个功能的人）：今天看了多久、还剩多少；输入密码后可以「再看 15/30/60 分钟」「今天不限」「退出儿童模式」（`api/kids/allow|leave`）；暂停时「现在回到这个模式」（`api/kids/start`，不要密码）。输入密码后还有「设置」：手机上的完整设置（给谁用、开关、拦不拦、任意分钟数、时段、休息间隔和时长、显示哪些 App 和顺序），一次提交到 `api/kids/config`（`allowed` 每行一个 key），全部合法才保存；在手机上开启时模式马上生效。`api/state` 的 `kids` 里有完整配置和可选的 App（`AppCatalog.kidsCandidates`，设了家长密码就会准备）。只在同一个局域网里，没有远程审批（不用第三方服务器）。
+- **测试**：`ConfigReceiver --ei kids_used_minutes 27` 把今天的用量设成 27 分钟，`--ei kids_continuous_minutes 28` 设连续观看时间，用来不等待地测提醒和锁定。`dumpsys activity …MainActivity` 打印 `Kids mode …` 一行。
+
 ## 按键声音
 
 `system/Sounds.kt` 播放电视系统自带的按键音（`AudioManager.playSoundEffect`）：焦点移动和控制中心滑块（音量、亮度）每走一格按方向播 `FX_FOCUS_NAVIGATION_*`，确认和长按打开菜单播 `FX_KEY_CLICK`，返回播 `FX_BACK`（Android 13 以下用 `FX_KEY_CLICK`），在网格边上或滑块到头时播 `FX_KEYPRESS_INVALID`。每台电视听起来和它自己的菜单一样；系统设置里关了按键音（`sound_effects_enabled`）时也不响。小米 MFTR0 用的是 Android TV 那套（`/system/media/audio/ui/android_TV_*`）。1.26 及以前用的是自己合成的音效，用户反馈不好听，已删掉。`MainActivity.dispatchKeyEvent` 把每个按键先交给 `Sounds.onKey`：记下方向键按下的时间和方向，返回键直接出声。`AppTile` 和 `Pressable` 拿到焦点时调 `Sounds.focusMoved()`，只有 250ms 内按过方向键才响，一次按键只响一次，所以打开面板、HOME 复位这类程序给的焦点不出声；唤醒屏保的那一下也不出声。个性化里「按键声音」可以关（`AerialSettings.uiSounds`，默认开）。
@@ -193,7 +208,8 @@ NanoHTTPD 监听 8790 端口，路径前缀是 8 位随机令牌（每次打开�
 
 - **下载并安装**：先从官网 `download/aerial-<flavor>.apk` 下载，失败再从 GitHub `releases/latest/download`（不用第三方 GitHub 代理）。下载后检查包名、签名（和这台电视上的 Aerial 比）和 versionCode，不对就不打开安装器，并在页上说明原因（`Updates.Failure`）。改过包名的版本（OPPO）不显示按钮。
 - **旧系统更新 TLS**（#871）：Android 5.0–6.0 的版本检查和 APK 下载连接用 `LegacyUpdateTls`，在系统根证书之外额外信任随包的 ISRG Root X1（`raw/isrg_root_x1.pem`，来源 `https://letsencrypt.org/certs/isrgrootx1.pem`，DER SHA-256 `96bcec06264976f37460779acf28c5a7cfe8a3c0aae11a8ffcee05c0bddf08c6`）。只给这两个更新连接设置 socket factory，不改全局默认值、主机名校验或其他网络功能，Android 7 起沿用系统设置。MiTV4-ANSM0 / Android 6.0.1 上以 ADB shell 运行生产信任管理代码对比：官网版本地址两者均 HTTP 200；GitHub APK 跳到 `release-assets.githubusercontent.com` 后，系统信任库报缺少根证书，补充后 HTTP 200 并能读取 APK 数据。没有用本地签名覆盖电视上的官方 Aerial，完整应用内覆盖升级仍需官方签名版本验证。
-- **安卓 9 及以上先用安装会话**（`Updates.installBySession`；#723 时从安卓 13 起，1.72 改成 9 起）：会话里除了 `aerial.apk`，还写入新包自带的 `assets/aerial-dm/28.dm`（安卓 9–11，profile 格式 010）或 `31.dm`（12 起，格式 015），作为 `aerial.dm`。系统安装时就按 Baseline Profile 编译（`speed-profile`，`install-dm`）。系统安装器不读 APK 里的 `assets/dexopt`，后台编译要等设备空闲，电视开着时等不到，所以不带 `.dm` 的升级会一直不编译，主线程慢约一倍（[PERF-2026-10-30.md](PERF-2026-10-30.md)）。两份 `.dm` 由 `app/build.gradle.kts` 的 `DexMetadataAssets` 从 AGP 的 `dex_metadata_directory` 拷来，并加上 `manifest.json`（小米安卓 14 没有它就报 `INSTALL_FAILED_BAD_DEX_METADATA`）。安卓 12 起 `setRequireUserAction(USER_ACTION_NOT_REQUIRED)` 加权限 `UPDATE_PACKAGES_WITHOUT_USER_ACTION`：自己更新自己时不弹确认页。小米 MFTR0 没有会话确认页（`CONFIRM_INSTALL` 找不到 Activity），不这样做就只能退回 `ACTION_VIEW`。安卓 13 起声明 `PACKAGE_SOURCE_OTHER`（#723：`ACTION_VIEW` 的安装记成本地文件，`ACCESS_RESTRICTED_SETTINGS` 变 deny，TCL T966D5 上守护随之被关；已经是 deny 的不会变回来）。失败时逐级退回：写会话出错或系统报 `DEX_METADATA`，只带 APK 再开一次会话；会话失败、或者没有确认页（#827），退回下面的 `ACTION_VIEW`。TCL MT5879（安卓 11）的会话会弹系统确认页，也能通过 TCL 的验证器。会话装过以后，安装来源变成 `app.orchard.tv`。海信 VIDAA_TV（安卓 9，#1004）提交会话后什么都不发生：没有回复、没有确认页，也不报错。所以 `Updates.awaitSession` 计时：安卓 12 以下提交后 8 秒没有回复，或者启动确认页后 4 秒主页没有 `onPause`，就放弃会话、退回 `ACTION_VIEW`；等待期间再按「下载并安装」不开新会话。安卓 12+ 不等回复（可能不弹页直接装，正在装的会话不能放弃），只等确认页。
+- **安卓 9 及以上先用安装会话**（`Updates.installBySession`；#723 时从安卓 13 起，1.72 改成 9 起）：会话里除了 `aerial.apk`，还写入新包自带的 `assets/aerial-dm/28.dm`（安卓 9–11，profile 格式 010）或 `31.dm`（12 起，格式 015），作为 `aerial.dm`。系统安装时就按 Baseline Profile 编译（`speed-profile`，`install-dm`）。系统安装器不读 APK 里的 `assets/dexopt`，后台编译要等设备空闲，电视开着时等不到，所以不带 `.dm` 的升级会一直不编译，主线程慢约一倍（[PERF-2026-10-30.md](PERF-2026-10-30.md)）。两份 `.dm` 由 `app/build.gradle.kts` 的 `DexMetadataAssets` 从 AGP 的 `dex_metadata_directory` 拷来，并加上 `manifest.json`（小米安卓 14 没有它就报 `INSTALL_FAILED_BAD_DEX_METADATA`）。安卓 12 起 `setRequireUserAction(USER_ACTION_NOT_REQUIRED)` 加权限 `UPDATE_PACKAGES_WITHOUT_USER_ACTION`：自己更新自己时不弹确认页。小米 MFTR0 没有会话确认页（`CONFIRM_INSTALL` 找不到 Activity），不这样做就只能退回 `ACTION_VIEW`。安卓 13 起声明 `PACKAGE_SOURCE_OTHER`（#723：`ACTION_VIEW` 的安装记成本地文件，`ACCESS_RESTRICTED_SETTINGS` 变 deny，TCL T966D5 上守护随之被关；已经是 deny 的不会变回来）。失败时逐级退回：写会话出错或系统报 `DEX_METADATA`，只带 APK 再开一次会话；会话失败、或者没有确认页（#827），退回下面的 `ACTION_VIEW`。TCL MT5879（安卓 11）的会话会弹系统确认页，也能通过 TCL 的验证器。会话装过以后，安装来源变成 `app.orchard.tv`。
+- **会话无响应兜底**（#1004、#1162；后者补丁未真机验证）：海信 VIDAA_TV 的安卓 9 / T963 和安卓 14 / MT9655 都有提交后既不回复、也不安装或弹确认页的报告。`Updates.awaitSession` 区分等待会话结果和等待确认页：安卓 9–11 等 8 秒，安卓 12+ 等 120 秒，给免确认安装和 dex 编译留时间，但只在 Aerial 自己是安装来源时（`mayInstallSilently`：别的安装来源下系统一定会问，也等 8 秒）；收到需要确认的回调后，改为等待确认页让主页 `onPause`，上限仍为 4 秒。无响应超时只放弃本次会话，忽略它的迟到回调，再用缓存 APK 走 `ACTION_VIEW`。主页在后台时延后到 `onResume` 才执行超时兜底；此时收到的确认请求也保留到回桌面再打开，4 秒从实际启动确认页才开始计时。普通离开/返回、关闭升级页都不清掉等待中的会话，避免重复提交。提交后显示 `Install.Waiting`，只有启动系统安装器或请求确认后主页确实暂停，才显示 `Install.Opened`。120 秒是兼容性折中，不是所有固件完成安装的保证；要回归海信问题机型和正常免确认升级的电视，尤其留意 `ACTION_VIEW` 对守护授权的影响。
 - **交给系统安装器**（安卓 8 及以下，以及会话不行时）：用 `ACTION_VIEW` + FileProvider（`res/xml/update_files.xml`，Android 7 以下用 `file://`）打开系统安装器。TCL 的安装校验原以为只放行由 `com.android.packageinstaller` 发起的安装（`ACTION_VIEW` 时发起者就是系统安装器，和当贝一样）；1.72 实测 MT5879 上会话安装也能通过。要 `REQUEST_INSTALL_PACKAGES`：小米有「安装未知应用」设置页，没开时跳过去；TCL 没有这个页面，靠 `install.sh` 用 `appops set … REQUEST_INSTALL_PACKAGES allow` 放行。
 - **没编译时自己重装一次**（`update/SelfCompile.kt`，2026-10-30）：U 盘、当贝、多屏互动、手机 ADB 工具装的，以及 1.71 → 1.72 那次升级，装完都没编译（`base.odex` 约 50–95 KB，编译好约 8 MB）。安卓 9+ 上 Aerial 启动时读 `odex` 大小（`SelfCompile.odexBytes`，诊断 `Compiled` 行也用它），小于 1 MB、APK 里有 `.dm`、这个版本还没试过，就用同一个会话（`Updates.reinstallSelf` → `commitSession`）把正在运行的 APK（`applicationInfo.sourceDir`）带上自己的 `.dm` 再装一遍。同版本覆盖，数据和 ADB 授的权限都保留。不论成败每个版本只试一次（偏好 `self_compile` / `tried_version`），失败只记日志，不走 `ACTION_VIEW`（那样带不了 `.dm`）。没有 `odex` 文件时（`cmd package delete-dexopt` 后）当作不知道，不做。
   - 安卓 12+：自动。Aerial `onStop` 后 20 秒还没回到前台才做（`AUTO_DELAY_MS`），不弹确认；这次会话万一要确认，放弃，不在别的 App 上面弹框。小米的设置页是半透明的，Aerial 仍算可见，要等它真正被盖住。小米 MFTR0 实测：云视听极光、小米屏保在前台时重装约 8 秒，`speed-profile / install-dm`，8.4 MB，守护正常；重装中途按主页键，先进 PatchWall 约 5 秒，然后守护把 Aerial 拉回来。
