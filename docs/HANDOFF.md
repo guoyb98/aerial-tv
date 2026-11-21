@@ -2,6 +2,23 @@
 
 写给接手 Aerial 的人或 AI。先读这份，再读 [ARCHITECTURE.md](ARCHITECTURE.md) 和 [devices/](devices/)。
 
+## 现状（2026-11-21）
+
+- **2.15（versionCode 157），Lite 1.38（40），2026-11-21 下午发布**（[v2.15](https://github.com/pengchujin/aerial-tv/releases/tag/v2.15)）：「从图标库选…」挤成细条、不能搜（微博评论）。iPhone Safari 里网格自己带 `max-height` 和滚动，WebKit 把 262 张图的行全压进 52vh，每张只剩几像素高。现在滚动放在外面一层 `.libscroll`，16:9 设在图片上，每张下面写 App 名，顶部加搜索框（16px，不触发放大），这个 App 自己的图在前、电视上装了的其次。索引加 `names`（`tools/icons/names.tsv`：中文名、英文名、别的叫法，208 个 App 写了 155 个，来源是两台电视上的名字、TCL APK 用 aapt2 读的名字、le5inioo.tsv、图上的字；认不准的没写），电视记下后 `api/library/all` 带 `name`，Lite 同步。验证：`tools/test_icon_library.py` 6 个、`IconLibraryTest`、三个 release 包编译、Lite lint；iOS 模拟器 Safari 通过本机代理打开小米 MFTR0 的手机页（页面用新文件，名字由代理按新索引补上），中英文、深浅色，搜「bili」「b站」「腾讯」「芒果」「music」都对，没装的 App 也有名字。三个包签名 e089…6685，standard / guard 单测、Lite lint 通过。两台装正式包回归：小米 MFTR0（install-multiple + 31.dm，speed-profile / install-dm）selftest 守护、主页键从设置 0.3 s、8 个信号源；TCL（`tcast-push.py`，uiautomator 确认焦点在「同意」后确定，compile speed）selftest 守护、主页键从浏览器 0.5 s、7 个信号源，两个 walleve 服务不变。Release 三个 APK 字节数：standard 3232749、guard 3232640、lite 1011615。**没做**：没在真 iPhone 上看、没替户主换图标；官网已部署（户主自己跑的 `tools/deploy-site.sh`，自动模式不让代理部署）：两个域名 version.txt=v2.15，notes.json 第一条 2.15，三个 APK 字节数和 Release 一致，`icons/index.json` 有 155 个 `names`，`/diag/aerial-710.apk` 还在。两台电视是在部署前装的 2.15，当时读到的是没有名字的旧索引、`checked_by` 已记成 157，所以要等 12 小时一到重读才有名字（部署后才升级的电视马上就有）；小米上手机页名称这一步还没在真机上看到。下次发版 versionCode ≥ 158，Lite ≥ 41。
+
+- **2.14（versionCode 156），Lite 1.37（39），2026-11-21 上午发布**（[v2.14](https://github.com/pengchujin/aerial-tv/releases/tag/v2.14)）：下面巡检的全部修复。三个包签名 e089…6685。两台装正式包回归：小米 MFTR0（install-multiple + 31.dm，speed-profile / install-dm）selftest 守护、主页键从设置 0.3 s、8 个信号源；TCL（`tcast-push.py`，uiautomator 确认焦点在「同意」后确定，compile speed）selftest 守护、主页键从浏览器 0.3 s、7 个信号源，两个 walleve 服务不变。官网已部署：两个域名 version.txt=v2.14，notes.json 第一条 2.14，三个 APK 字节数和 Release 一致（standard 3231699、guard 3231548、lite 1010547），`tools/install.sh` 带上了海信空属性的改动，`/diag/aerial-710.apk` 还在。#1661 #1668 #1671 #1673 #1681 #1606 #1679 和 PR #1660 贴了发布链接（`local/triage/release-2.14-posts.py`），issue 都留着等确认。下次发版 versionCode ≥ 157，Lite ≥ 40。
+
+- **2026-11-21 上午全量巡检**（记录 `local/triage/2026-11-21-full.md`，回复 `replies-2026-11-21.py`，发出 `posted-2026-11-21.txt`，39 条，关闭 20 个）：337 issue / 69 PR，新的或有新回复的 25 个（复查又来 #1554）逐个读过。改动（每个一个提交，已随 2.14 发布）：
+  - **峰米亮度**（#1661，8199f4e）：2.13 只认 FengOS 设置面板，小明 Q1 Pro（olaf）没有面板，亮度行还在；现在装有峰米桌面 `com.tvfengmi.launcher` 也算（Ultraman 投影也有这个桌面，同样不显示）。Lite 同步。没有真机。
+  - **电量**（#1671 #1673 #1681，6d639dc）：插着电就不显示（MECOOL 盒子一直报「有电池、USB、充电中 42%」，平板改的盒子插电 85%），只在用电池时显示；去掉了「充电中」状态。Lite 同步。两台测试电视都没电池，这个场景没在真机上验证。
+  - **个性化页上下乱窜**（#1606，d337d47）：「关于 Aerial」加到最底以后，「家长密码」「儿童模式」两行还留着获得焦点就滚到底的旧逻辑，和焦点自己的滚动打架。去掉。小米 MFTR0 上录屏逐帧复现、修后验证。Lite 没有对应代码。
+  - **海信 `persist.vt.use_home_pkg` 为空也写**（#1679，4bb7b9b）：属性为空但装有聚好看时，`install.sh` 也改成 Aerial，`aerial_vt_home_pkg` 记 `-`，`restore.sh` 还原时清空；agent.md 中英同步；`tools/test_install.py` / `test_restore.py` 加了用例。属性本身是报告人 Agent 在 MT9603 真机上验证的，脚本没上过海信；**发版时跑 deploy-site 后官网脚本才更新**。
+  - **PR #1660 合入**（a31d5f8）：极米 H3S 唤醒 / 开机后前台是 Home 选择框时守护发一次返回。没有极米真机，报告人实测。
+  - 文档：乐视 X43（7cb2553）、MFTR0 安卓 11 / OS2 开机先出 PatchWall（dd2865d）、峰米亮度、海信两台（MT9603、Hi3751 4.4 Lite）、README 机型表加乐视 C1S（1946b22）。
+- 验证：standard 单测 278 个、Lite lint、install / restore 离线测试 14 个通过；standard / guard 测试包 versionCode 155（**未提交**，`build.gradle.kts` 已改回 154），签名 e089…6685。小米 MFTR0（install-multiple + 31.dm，speed-profile / install-dm）selftest 守护、主页键从设置 0.4 s、8 个信号源，屏保进出录屏无黑帧；TCL（`tcast-push.py`，uiautomator 确认焦点在「同意」后确定，compile speed）selftest 守护、主页键从浏览器 0.3 s、7 个信号源，两个 walleve 服务不变，屏保进出无黑帧（退出那一下 TCL 的录屏没录到，退出后画面停在同一段影片上）。**下次发版 versionCode ≥ 156，Lite ≥ 39（Lite 改了）**。
+- 小米测试时的现场：音频输出在 HDMI ARC 上（小米 QuickMute 静音），控制中心音量行显示「已静音」，不是测试改的，没动。测试中按 OK 打开过一次首页的 HDMI 信号源磁贴，已按主页键回到 Aerial。
+- 等回复：#1683（没写哪里不对）、#1677 海尔 T966 的 RootActivity、#1658 `soft_layer` 试验、#1656 撤掉 Aerial 后 USB 2.0 口、#1682 role 写入后几天的观察、#1629 卡住时的诊断。
+
 ## 现状（2026-11-20）
 
 - **2.13（versionCode 154），Lite 1.36（38），2026-11-20 晚上发布**（[v2.13](https://github.com/pengchujin/aerial-tv/releases/tag/v2.13)）：下午巡检的全部修复，加上户主 2026-11-20 定的几件事：
